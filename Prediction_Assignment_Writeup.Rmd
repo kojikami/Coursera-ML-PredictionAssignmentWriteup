@@ -1,0 +1,116 @@
+---
+title: "Prediction Assignment Writeup"
+author: "kojikami"
+date: "February 21, 2015"
+output: html_document
+---
+
+Objective of this Project
+---------------------
+>The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+Data Collection & Cleansing
+---------------------
+```{r, echo=TRUE}
+train_url <- 
+        "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_url <- 
+        "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(train_url, destfile = "data/training.csv", method = "curl")
+download.file(test_url, destfile = "data/testing.csv", method = "curl")
+train <- read.csv("data/training.csv", na.strings=c("NA","#DIV/0!",""))
+test <- read.csv("data/testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+### Setting up Packages
+```{r echo=TRUE, results='hide'}
+library(caret)
+library(kernlab)
+library(AppliedPredictiveModeling)
+library(randomForest)
+library(ggplot2)
+library(Metrics)
+```
+
+Features Selection for Analysis
+---------------------
+For the reason that from train data from 1 to 7 column is not necessary for prediction, then we subset train data: remove user name, window, and time. Remove the columns that contain `NAs`, because columns which contain `NAs` will not predict good. Use training set and split into `training_train` and `training _test` sets and build model on training set.The function `createDataPartition` can be used to create balanced splits of the data. If the y argument to this function is a factor, the random sampling occurs within each class and should preserve the overall class distribution of the data. For this project, create a single 75% and 25% split of the data.
+
+```{r echo=TRUE}
+training <- train[,-c(1:7)]
+set.seed(100)
+inTrain <- createDataPartition(training$classe, p = 0.75, list = FALSE)
+training_train <- training[inTrain,]
+training_test <- training[-inTrain,]
+dim(training_train)
+training_train <- as.data.frame(training_train)
+clean_train <- training_train[, colSums(is.na(training_train)) == 0]
+clean_test <- training_test[, colSums(is.na(training_test)) == 0]
+```
+
+Modeling & Analysis
+---------------------
+```{r echo=TRUE}
+set.seed(150)
+tr <- trainControl(method = "cv", number = 5)
+#first prediction model
+modelFit1 <- train(classe ~., data = clean_train, 
+                   method = "rf", trControl = tr)
+prediction1 <- predict(modelFit1, clean_train)
+print(modelFit1)
+summary(modelFit1$finalModel)
+confusionMatrix(predict(modelFit1, newdata = clean_test), clean_test$classe)
+table(prediction1, clean_train$classe)
+```
+
+Prediction
+---------------------
+```{r echo=TRUE}
+#predict train_test data
+modelFit2 <- train(classe~., data = clean_test, 
+                   method = "rf", trControl = tr)
+prediction2 <- predict(modelFit1, newdata = clean_test)
+table(prediction2, clean_test$classe)
+sum(clean_test$classe == predict(modelFit1, clean_test)) / nrow(clean_test)
+test <- test[,colSums(is.na(test)) == 0]
+test <- test[,-c(1:7)]
+#predict test data
+prediction3 <- predict(modelFit2, newdata = test)
+```
+
+Submission
+---------------------
+```{r echo=TRUE}
+#coursera code 
+pml_write_files = function(x){
+        n = length(x)
+        for(i in 1:n){
+                filename = paste0("problem_id_",i,".txt")
+                write.table(x[i], file = filename, quote = FALSE,
+                            row.names = FALSE, col.names = FALSE)
+        }
+}
+
+pml_write_files(prediction3)
+```
+
+Conclusion
+---------------------
+Out of sample error is 0.993. Confusion matrix is relatively accurate.
+
+Appendix
+---------------------
+Figure1: Plot of modelFit
+```{r echo=TRUE}
+ggplot(modelFit1)
+```
+
+Figure2: Importance of variables
+```{r echo=TRUE}
+plot(varImp(modelFit1))
+```
+
+Figure3: Prediction plot
+```{r echo=TRUE}
+qplot(predict(modelFit1,clean_test), classe, data=clean_test)
+```
